@@ -6,6 +6,7 @@ import argparse
 import base64
 import copy
 import csv
+import gzip
 import hashlib
 import http.cookiejar
 import itertools
@@ -18,6 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -70,7 +72,9 @@ def canonical(url):
 
 
 def product_url(url):
-    return urllib.parse.urlsplit(url).path.startswith("/shop/")
+    # The listing product card and the detail cart form identify a product.
+    # Revita also has real products under /promo-paketi/, not only /shop/.
+    return bool(urllib.parse.urlsplit(url).path.strip('/'))
 
 
 def parse_doc(source):
@@ -109,6 +113,14 @@ def decoded_expiry(root):
 
 
 def parse_listing(source, category_url):
+    payload={}
+    decoded=source.decode('utf-8-sig',errors='replace') if isinstance(source,bytes) else source
+    if decoded.lstrip().startswith('{'):
+        payload=json.loads(decoded)
+        pieces=[payload.get(k,'') for k in ('rendered_products_top','rendered_products','rendered_products_bottom')]
+        if not isinstance(payload.get('rendered_products'),str):
+            raise ValueError('Listing JSON missing rendered_products')
+        source='<html><body>'+''.join(p for p in pieces if isinstance(p,str))+'</body></html>'
     doc = parse_doc(source)
     containers = doc.xpath('//*[@id="js-product-list"]')
     if not containers:
@@ -138,6 +150,13 @@ def parse_listing(source, category_url):
             # Page 1 is the unparameterized start page, not a new crawl target.
             pages.add(BASE + u.path.rstrip('/') + ("?page="+number if int(number)>1 else ''))
     total = None
+    pagination=payload.get('pagination') or {}
+    if not isinstance(pagination,dict):pagination={}
+    if str(pagination.get('total_items','')).isdigit():total=int(pagination['total_items'])
+    maximum=max([int(urllib.parse.parse_qs(urllib.parse.urlsplit(p).query).get('page',['1'])[0]) for p in pages]+[int(pagination.get('pages_count') or 1)])
+    if maximum>500:raise ValueError('Category reports more than 500 pages')
+    # Ellipsis pagination lists only 1,2,3,last. Visit the intervening pages too.
+    pages.update(BASE+base_path+'?page='+str(i) for i in range(2,maximum+1))
     text = " ".join(doc.xpath('//*[@id="js-product-list-top" or ' + CLASS("pagination") + ']//text()'))
     match = re.search(r"(?:общо\s*|от\s+)(\d+)\s*(?:продукт|product)", text, re.I)
     if match:
@@ -612,32 +631,88 @@ def build_row(p, template, config):
                  'issues':' | '.join(issues),'requires_review':bool(issues)}
 
 
+class InvalidResponse(ValueError):
+    pass
+
+
 class Client:
-    def __init__(self, delay=1.2, cache='cache', timeout=45, refresh=False):
+    def __init__(self, delay=1.5, cache='cache', timeout=45, refresh=False, diagnostics='output/diagnostics'):
         self.delay,self.timeout,self.refresh=delay,timeout,refresh
         self.cache=Path(cache);self.cache.mkdir(parents=True,exist_ok=True)
         self.opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.last=0
+        self.diagnostics=Path(diagnostics)
+        self.attempts=[]
 
-    def get(self, url, fresh=False):
+    def validate(self, body, kind, url):
+        if not body or not body.strip():raise InvalidResponse('HTTP response has empty body')
+        if kind=='listing':
+            try:parse_listing(body,canonical(url))
+            except Exception as exc:raise InvalidResponse('Invalid listing: '+str(exc)) from exc
+            if body.lstrip().startswith(b'{'):
+                pagination=json.loads(body).get('pagination') or {}
+                expected=int(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('page',['1'])[0])
+                if pagination.get('current_page') and int(pagination['current_page'])!=expected:
+                    raise InvalidResponse('Server returned another listing page')
+        elif kind=='product':
+            try:
+                d=parse_doc(body)
+                if not d.xpath('//h1') or not d.xpath('//form[@id="add-to-cart-or-refresh"]'):
+                    raise ValueError('Primary product title/cart form absent')
+                target=first(d,'//link[@rel="canonical"]/@href')
+                if target and canonical(target)!=canonical(url):raise ValueError('Different canonical product')
+            except Exception as exc:raise InvalidResponse('Invalid product: '+str(exc)) from exc
+        elif kind=='json':
+            try:json.loads(body)
+            except Exception as exc:raise InvalidResponse('Invalid JSON: '+str(exc)) from exc
+
+    def record_failure(self, url, body, message):
+        self.diagnostics.mkdir(parents=True,exist_ok=True)
+        key=hashlib.sha256(url.encode()).hexdigest()[:16]
+        # The failure bodies are diagnostic only; never treated as product data.
+        (self.diagnostics/(key+'.response')).write_bytes(body)
+        (self.diagnostics/(key+'.json')).write_text(json.dumps({'url':url,'error':message,'bytes':len(body)},ensure_ascii=False,indent=2),encoding='utf-8')
+
+    def get(self, url, fresh=False, kind='html'):
         u=urllib.parse.urlsplit(url)
         if u.scheme!='https' or u.hostname not in ('revita.bg','www.revita.bg'):
             raise ValueError('Request outside allowed site')
         cache=self.cache/(hashlib.sha256(url.encode()).hexdigest()+'.html')
-        if cache.exists() and not self.refresh and not fresh:return cache.read_bytes()
+        if cache.exists() and not self.refresh and not fresh:
+            body=cache.read_bytes()
+            try:self.validate(body,kind,url);return body
+            except InvalidResponse:cache.unlink()
         error=None
-        for attempt in range(4):
+        for attempt in range(5):
             time.sleep(max(0,self.delay-(time.monotonic()-self.last)))
             try:
-                req=urllib.request.Request(url,headers={'User-Agent':'RevitaCatalogExporter/1.0 (product catalog export)', 'Accept':'text/html,application/json', 'Accept-Language':'bg-BG,bg;q=0.9', 'Accept-Encoding':'identity'})
+                # Revita can serve HTTP 200 + zero bytes for the cached clean URL.
+                # A fresh query was verified to return the actual product HTML.
+                parsed=urllib.parse.urlsplit(url)
+                params=urllib.parse.parse_qsl(parsed.query,keep_blank_values=True)
+                if kind=='listing' and not any(k=='ajax' for k,v in params):
+                    params.append(('ajax','1'))
+                params.append(('_revita_export',str(time.time_ns())))
+                request_url=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(params)))
+                req=urllib.request.Request(request_url,headers={'User-Agent':'RevitaCatalogExporter/1.1 (product catalog export)', 'Accept':'application/json' if kind=='json' else 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'Accept-Language':'bg-BG,bg;q=0.9', 'Accept-Encoding':'gzip, deflate', 'Cache-Control':'no-cache'})
                 self.last=time.monotonic()
                 with self.opener.open(req,timeout=self.timeout) as response:
                     if urllib.parse.urlsplit(response.url).hostname not in ('revita.bg','www.revita.bg'):
                         raise ValueError('Redirect outside allowed host')
                     body=response.read()
+                    encoding=(response.headers.get('Content-Encoding') or '').lower()
+                    meta={'url':url,'attempt':attempt+1,'status':getattr(response,'status',200),'content_type':response.headers.get('Content-Type'),'encoding':encoding,'received_bytes':len(body)}
+                    self.attempts.append(meta)
+                    if encoding=='gzip' or body.startswith(b'\x1f\x8b'):body=gzip.decompress(body)
+                    elif encoding=='deflate':
+                        try:body=zlib.decompress(body)
+                        except zlib.error:body=zlib.decompress(body,-zlib.MAX_WBITS)
+                    elif encoding and encoding!='identity':raise InvalidResponse('Unsupported content encoding: '+encoding)
                 lower=body[:60000].lower()
                 if any(x in lower for x in [b'<title>just a moment',b'cf-chl-',b'challenge-platform',b'<title>access denied']):
+                    self.record_failure(url,body,'Verification/access-denied response')
                     raise ValueError('Verification/access-denied response: '+url)
+                self.validate(body,kind,url)
                 cache.write_bytes(body)
                 return body
             except urllib.error.HTTPError as exc:
@@ -645,6 +720,11 @@ class Client:
                 if exc.code not in (429,500,502,503,504):break
                 wait=exc.headers.get('Retry-After','')
                 time.sleep(min(45,int(wait)) if wait.isdigit() else min(30,2**attempt*3))
+            except (InvalidResponse,gzip.BadGzipFile,zlib.error,EOFError) as exc:
+                error=exc
+                self.record_failure(url,body,str(exc))
+                LOG.warning('Retry %s/5 %s: %s',attempt+1,url,exc)
+                if attempt<4:time.sleep(min(20,2**attempt*2))
             except (urllib.error.URLError,TimeoutError,OSError) as exc:
                 error=exc;time.sleep(min(20,2**attempt*2))
         raise RuntimeError('Failed request '+url+': '+str(error))
@@ -664,7 +744,7 @@ def expand_variants(product, source, client):
     for combination in itertools.product(*opts.values()):
         selected=dict(zip(opts,combination))
         query={**params,**{k:v[0] for k,v in selected.items()},'ajax':'1','action':'refresh','qty':'1'}
-        payload=json.loads(client.get(product['url']+'?'+urllib.parse.urlencode(query)))
+        payload=json.loads(client.get(product['url']+'?'+urllib.parse.urlencode(query),kind='json'))
         vid=str(payload.get('id_product_attribute') or '')
         if not vid:raise ValueError('Variant refresh returned no combination ID')
         if vid in seen:continue
@@ -707,7 +787,7 @@ def main(argv=None):
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',default='config.json');ap.add_argument('--template')
     ap.add_argument('--output',default='output');ap.add_argument('--limit',type=int,default=0)
-    ap.add_argument('--delay',type=float,default=1.2);ap.add_argument('--refresh',action='store_true')
+    ap.add_argument('--delay',type=float,default=1.5);ap.add_argument('--refresh',action='store_true')
     ap.add_argument('--offline',action='store_true',help='Use bundled fixtures, with ZERO network requests')
     args=ap.parse_args(argv)
     if args.limit<0:ap.error('--limit must be 0 or a positive number')
@@ -724,7 +804,7 @@ def main(argv=None):
         products=[parse_product(fixture,url,hints.get(url),'Alive')]
         coverage=[{'category':'alive','pages':1,'products_found':len(hints),'status':'OFFLINE: one supplied product only'}]
     else:
-        client=Client(args.delay,refresh=args.refresh)
+        client=Client(args.delay,refresh=args.refresh,diagnostics=output/'diagnostics')
         for category in CATEGORIES:
             start=BASE+'/'+category;queue=[start];visited=set();signatures=set();category_urls=set();reported=None
             while queue:
@@ -734,7 +814,7 @@ def main(argv=None):
                     errors.append({'stage':'category','url':start,'error':'Pagination exceeded 500 pages'});break
                 visited.add(url)
                 try:
-                    hints,pages,total=parse_listing(client.get(url),start)
+                    hints,pages,total=parse_listing(client.get(url,kind='listing'),start)
                     signature=tuple(sorted(hints))
                     if signature in signatures:raise ValueError('Repeated listing page; pagination may be blocked/ignored')
                     signatures.add(signature)
@@ -747,13 +827,13 @@ def main(argv=None):
                     LOG.info('%s page %s: %s products',category,len(visited),len(hints))
                 except Exception as exc:
                     errors.append({'stage':'category','url':url,'error':str(exc)});LOG.error('%s',exc)
-            if reported and len(category_urls)<reported:
+            if reported is not None and len(category_urls)!=reported:
                 errors.append({'stage':'category','url':start,'error':f'Found {len(category_urls)}, reported {reported}'})
             coverage.append({'category':category,'pages':len(visited),'products_found':len(category_urls),'reported_total':reported,'status':'ERROR' if any(e['stage']=='category' and canonical(e['url'])==start for e in errors) else 'OK'})
         targets=list(links.items())[:args.limit or None]
         for index,(url,info) in enumerate(targets,1):
             try:
-                source=client.get(url)
+                source=client.get(url,kind='product')
                 product=parse_product(source,url,info['hint'],info['category'])
                 products.extend(expand_variants(product,source,client))
                 LOG.info('Product %s/%s: %s',index,len(targets),product['title'])
@@ -777,6 +857,8 @@ def main(argv=None):
     write_csv(output/'errors.csv',errors,['stage','url','error'])
     (output/'coverage.json').write_text(json.dumps(coverage,ensure_ascii=False,indent=2),encoding='utf-8')
     (output/'discovered_urls.json').write_text(json.dumps(links,ensure_ascii=False,indent=2),encoding='utf-8')
+    if not args.offline:
+        (output/'http_attempts.json').write_text(json.dumps(getattr(client,'attempts',[]),ensure_ascii=False,indent=2),encoding='utf-8')
     summary={'mode':'offline fixture' if args.offline else 'live','timestamp':datetime.now(timezone.utc).isoformat(),
              'discovered_unique_products':len(links),'exported_rows':len(rows),'errors':len(errors),
              'rows_requiring_review':sum(r['requires_review'] for r in reports),'limited_run':bool(args.limit),

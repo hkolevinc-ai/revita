@@ -182,7 +182,7 @@ class RevitaTests(unittest.TestCase):
         p=copy.deepcopy(self.product)
         p['variant_options']={'group[1]':[('1','Small'),('2','Large')]}
         class FakeClient:
-            def get(self,url):
+            def get(self,url,**kwargs):
                 large='group%5B1%5D=2' in url
                 price='20.00' if large else '10.00'
                 return json.dumps({'id_product_attribute':2 if large else 1,
@@ -196,7 +196,7 @@ class RevitaTests(unittest.TestCase):
     def test_bad_variant_response_not_silently_exported(self):
         p=copy.deepcopy(self.product);p['variant_options']={'group[1]':[('1','Small')]}
         class FakeClient:
-            def get(self,url):return b'{}'
+            def get(self,url,**kwargs):return b'{}'
         with self.assertRaises(ValueError):revita.expand_variants(p,self.product_source,FakeClient())
 
     def test_client_blocks_other_domains_without_network(self):
@@ -211,7 +211,7 @@ class RevitaTests(unittest.TestCase):
         src2=src1.decode().replace(url1,url2).replace('value="586"','value="587"')
         class FakeClient:
             def __init__(self,*args,**kwargs):pass
-            def get(self,url):
+            def get(self,url,**kwargs):
                 if url==url1:return src1
                 if url==url2:return src2.encode()
                 base=url.split('?')[0];second='page=2' in url
