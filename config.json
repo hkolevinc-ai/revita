@@ -2,15 +2,59 @@
   "template": "templates/temu_template.xlsx",
   "stock_if_available": 20,
   "default_weight_g": 1000,
-  "default_dimensions_cm": [20, 20, 20],
+  "default_dimensions_cm": [
+    20,
+    20,
+    20
+  ],
   "shipping_template": "Magazin",
   "handling_time": "2 Days",
-  "blank_brand_and_manufacturer": ["Alive", "Nature's Way", "Natures Way", "Double Wood", "Bärbel Drexel"],
-  "brand_manufacturers": {
-    "now foods": "NOW Health Group, Inc",
-    "natural factors": "Natural Factors Nutritional Products Ltd",
-    "webber naturals": "WN Pharmaceuticals Ltd."
+  "product_overrides": {},
+  "country_mode": "per_product_explicit_evidence_only",
+  "ocr": {
+    "cache": "cache/images",
+    "languages": "eng+bul",
+    "min_confidence": 55,
+    "min_words": 3,
+    "delay": 0.5
   },
-  "eu_responsible_by_brand": {},
-  "product_overrides": {}
+  "brands": {
+    "alive": {
+      "aliases": [
+        "Alive",
+        "ALIVE!"
+      ],
+      "brand": "ALIVE!",
+      "trademark": "ALIVE!",
+      "manufacturer": "Nature's Way Brands, LLC",
+      "eu_responsible": "Geo Nutrition LTD.",
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+    },
+    "double-wood": {
+      "aliases": [
+        "Double Wood",
+        "Double Wood Supplements",
+        "Double-Wood"
+      ],
+      "brand": "DOUBLE WOOD",
+      "trademark": "DOUBLE WOOD",
+      "manufacturer": "Double Wood LLC",
+      "eu_responsible": "Geo Nutrition LTD.",
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+    },
+    "natures-way": {
+      "aliases": [
+        "Nature's Way",
+        "Nature’s Way",
+        "Nature`s Way",
+        "Natures Way",
+        "natures-way"
+      ],
+      "brand": "NATURE'S WAY",
+      "trademark": "Nature's Way",
+      "manufacturer": "Nature's Way Brands, LLC",
+      "eu_responsible": "Geo Nutrition LTD.",
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+    }
+  }
 }

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-import revita
+import revita_core as revita
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -21,6 +21,22 @@ class Response:
 
 
 class HttpRegressions(unittest.TestCase):
+    def test_canonical_mismatch_accepts_only_exact_category_product_id(self):
+        body=(ROOT/'tests/fixtures/product-canonical-mismatch.html').read_bytes()
+        url=revita.BASE+'/shop/osteomuuv-super-grizha-za-stavite-1431-mg'
+        hint={'id':'1313','reference':'2684 NF','brand':'Natural Factors'}
+        p=revita.parse_product(body,url,hint)
+        self.assertEqual(p['id'],'1313')
+        self.assertEqual(p['url'],url)
+        self.assertEqual(p['count'],120)
+        self.assertEqual(p['price'],41.83)
+        with tempfile.TemporaryDirectory() as temp:
+            c=revita.Client(cache=Path(temp)/'cache',diagnostics=Path(temp)/'diag')
+            c.validate(body,'product',url,expected_id='1313')
+            with self.assertRaises(revita.InvalidResponse):c.validate(body,'product',url,expected_id='28854')
+            with self.assertRaises(revita.InvalidResponse):c.validate(body,'product',url)
+        with self.assertRaises(ValueError):revita.parse_product(body,url,{**hint,'id':'28854'})
+
     def test_real_ajax_page_two_has_seventeen_products(self):
         source=(ROOT/'tests/fixtures/category-page2.json').read_bytes()
         hints,pages,total=revita.parse_listing(source,revita.BASE+'/alive')
@@ -52,7 +68,7 @@ class HttpRegressions(unittest.TestCase):
             return Response(b'' if len(requests)==1 else body,request.full_url,'application/json')
         with tempfile.TemporaryDirectory() as temp:
             client=revita.Client(delay=0,cache=Path(temp)/'cache',diagnostics=Path(temp)/'diag')
-            with patch.object(client.opener,'open',side_effect=open_response),patch('revita.time.sleep'):
+            with patch.object(client.opener,'open',side_effect=open_response),patch('revita_core.time.sleep'):
                 result=client.get(url,kind='listing')
             self.assertEqual(result,body)
             self.assertEqual(len(requests),2)
@@ -64,7 +80,7 @@ class HttpRegressions(unittest.TestCase):
     def test_empty_body_never_written_as_valid_cache(self):
         with tempfile.TemporaryDirectory() as temp:
             client=revita.Client(delay=0,cache=Path(temp)/'cache',diagnostics=Path(temp)/'diag')
-            with patch.object(client.opener,'open',return_value=Response(b'',revita.BASE+'/alive')),patch('revita.time.sleep'):
+            with patch.object(client.opener,'open',return_value=Response(b'',revita.BASE+'/alive')),patch('revita_core.time.sleep'):
                 with self.assertRaises(RuntimeError):client.get(revita.BASE+'/alive',kind='listing')
             self.assertEqual(len(list((Path(temp)/'cache').glob('*.html'))),0)
             self.assertEqual(len(client.attempts),5)
@@ -77,7 +93,7 @@ class HttpRegressions(unittest.TestCase):
             cache=client.cache/(hashlib.sha256(url.encode()).hexdigest()+'.html')
             cache.write_bytes(b'')
             body=(ROOT/'tests/fixtures/category-page2.json').read_bytes()
-            with patch.object(client.opener,'open',return_value=Response(body,url,'application/json')),patch('revita.time.sleep'):
+            with patch.object(client.opener,'open',return_value=Response(body,url,'application/json')),patch('revita_core.time.sleep'):
                 self.assertEqual(client.get(url,kind='listing'),body)
             self.assertEqual(cache.read_bytes(),body)
 
@@ -87,7 +103,7 @@ class HttpRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             client=revita.Client(delay=0,cache=Path(temp)/'cache',diagnostics=Path(temp)/'diag')
             response=Response(gzip.compress(body),url,encoding='gzip')
-            with patch.object(client.opener,'open',return_value=response),patch('revita.time.sleep'):
+            with patch.object(client.opener,'open',return_value=response),patch('revita_core.time.sleep'):
                 self.assertEqual(client.get(url,kind='product'),body)
 
     def test_wrong_json_current_page_is_rejected(self):
