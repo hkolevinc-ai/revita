@@ -1,4 +1,4 @@
-name: Revita Temu Filtered Export
+name: Revita Temu All Three Brands
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-bul
-      - name: Test against supplied HTML
+      - name: Test parser and export policies
         run: python -m unittest discover -s tests -v
       - name: Export products
         env:
@@ -42,7 +42,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: revita-temu-filtered-results
+          name: revita-temu-all-brands-results
           path: output/
           if-no-files-found: warn
           retention-days: 30
