@@ -82,10 +82,13 @@ def make_row(p,t,config,origin,profile,category):
         if t.headers[c] in ['Product Name','Bullet Point','Product Description']:
             for line in str(v).splitlines():
                 if hits(line,ECO):problems.append('eco_claim_in_final_text')
-                if not SAFETY_PREFIX.search(line.strip()) and (hits(line,MEDICAL) or hits(line,OTHER)):problems.append('claim_in_final_text')
+                if config.get('medical_claim_filter',True) and not SAFETY_PREFIX.search(line.strip()) and (hits(line,MEDICAL) or hits(line,OTHER)):problems.append('claim_in_final_text')
     return row,sorted(set(problems))
 
 def screen_product(p,t,config,reviewer):
+    if config.get('export_policy')=='full_catalog_no_medical_filter':
+        from catalog_policy import evaluate
+        return evaluate(p,t,config,reviewer)
     if config.get('export_policy')=='neutral_factual_listing':
         from listing_policy import evaluate
         return evaluate(p,t,config,reviewer)
@@ -177,7 +180,8 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
     config=json.loads(Path(args.config).read_text(encoding='utf-8'));t=core.Template(config['template'])
     output=Path(args.output);output.mkdir(parents=True,exist_ok=True)
-    for old in output.glob('TEMU_REVITA_FILTERED_*.xlsx'):old.unlink()
+    for pattern in ['TEMU_REVITA_FILTERED_*.xlsx','TEMU_REVITA_ALL_*.xlsx','TEMU_REVITA_COMPLETE_DATA_*.xlsx']:
+        for old in output.glob(pattern):old.unlink()
     reviewer=ImageReviewer(**config['ocr'],refresh=args.refresh);reviewer.preflight()
     errors=[];coverage=[];links={};products=[];client=None
     if args.from_catalog or args.from_results:
@@ -213,11 +217,17 @@ def main(argv=None):
     for row,audit in candidates:
         if counts[audit['sku']]>1:audit['decision']='excluded';audit['reasons'].append('duplicate_original_sku')
         else:rows.append(row)
-    for start in range(0,len(rows),4996):t.write(rows[start:start+4996],output/f'TEMU_REVITA_FILTERED_{start//4996+1:03d}.xlsx')
+    broad=config.get('export_policy')=='full_catalog_no_medical_filter'
+    prefix='TEMU_REVITA_ALL' if broad else 'TEMU_REVITA_FILTERED'
+    for start in range(0,len(rows),4996):t.write(rows[start:start+4996],output/f'{prefix}_{start//4996+1:03d}.xlsx')
+    complete=[row for row,a in candidates if a['decision']=='included' and a.get('required_data_complete',False)]
+    if broad:
+        for start in range(0,len(complete),4996):t.write(complete[start:start+4996],output/f'TEMU_REVITA_COMPLETE_DATA_{start//4996+1:03d}.xlsx')
     def save(name,obj):(output/name).write_text(json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     save('catalog.json',products);save('screening.json',audits);save('image_screening.json',image_audits)
     csv_write(output/'excluded.csv',[a for a in audits if a['decision']!='included'],['id','sku','url','brand','reasons','claim_evidence','origin','origin_evidence','category_reason'])
-    csv_write(output/'included.csv',[a for a in audits if a['decision']=='included'],['id','sku','url','brand','origin','origin_evidence','retained_images','removed_eco_paragraphs','logistics_defaults','visual_review_required'])
+    csv_write(output/'included.csv',[a for a in audits if a['decision']=='included'],['id','sku','url','brand','origin','origin_evidence','retained_images','removed_eco_paragraphs','logistics_defaults','visual_review_required','required_data_complete','pending_fields'])
+    csv_write(output/'needs_data.csv',[a for a in audits if a['decision']=='included' and a.get('pending_fields')],['id','sku','url','brand','pending_fields','origin','category_reason'])
     csv_write(output/'images.csv',image_audits,['id','sku','url','status','sha256','confidence','medical','eco','other','error'])
     csv_write(output/'errors.csv',errors,['stage','url','error'])
     save('coverage.json',coverage);save('discovered_urls.json',links);save('http_attempts.json',getattr(client,'attempts',[]))
@@ -226,6 +236,9 @@ def main(argv=None):
     summary={'mode':'offline snapshot' if args.from_catalog or args.from_results else 'live','timestamp':datetime.now(timezone.utc).isoformat(),
              'categories':CATEGORIES,'discovered_products':len(links),'scanned_products':len(products),'exported_rows':len(rows),
              'excluded_products':sum(a['decision']!='included' for a in audits),'errors':len(errors),
+             'exported_by_brand':dict(collections.Counter(a.get('brand','') for a in audits if a['decision']=='included')),
+             'medical_claim_filter':config.get('medical_claim_filter',True),'required_data_complete_rows':len(complete),
+             'rows_needing_data':sum(bool(a.get('pending_fields')) for a in audits if a['decision']=='included'),
              'exclusion_reasons':dict(collections.Counter(x for a in audits if a['decision']!='included' for x in a['reasons'])),
              'complete_crawl':not args.limit and not args.from_catalog and not args.from_results and not errors and all(x['status']=='OK' for x in coverage),
              'original_skus_preserved':True,'visual_review_required':any(a.get('visual_review_required',True) for a in audits if a['decision']=='included'),'temu_approval_guaranteed':False}

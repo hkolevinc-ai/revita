@@ -26,7 +26,7 @@ def label_text(text):
 def neutral_title(p,category):
     base=TITLES.get(category)
     if not base:
-        base=factual_text(p['ingredients'][0])
+        base=factual_text(p['ingredients'][0] if p.get('ingredients') else p['title'])
         base=re.split(r'\d+(?:[.,]\d+)?\s*(?:mg|mcg|µg|μg|g|ml|IU)\b',base,flags=re.I)[0].strip(' ,;:')
     if category=='17613':
         forms=[('бисглицинат','бисглицинат'),('цитрат','цитрат'),('хлорид','хлорид'),('малат','малат'),('таурат','таурат'),('треонат','L-треонат')]

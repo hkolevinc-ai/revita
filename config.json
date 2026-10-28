@@ -28,7 +28,13 @@
       "trademark": "ALIVE!",
       "manufacturer": "Nature's Way Brands, LLC",
       "eu_responsible": "Geo Nutrition LTD.",
-      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28",
+      "origin_source_hosts": [
+        "revita.bg",
+        "www.revita.bg",
+        "naturesway.com",
+        "www.naturesway.com"
+      ]
     },
     "double-wood": {
       "aliases": [
@@ -40,7 +46,13 @@
       "trademark": "DOUBLE WOOD",
       "manufacturer": "Double Wood LLC",
       "eu_responsible": "Geo Nutrition LTD.",
-      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28",
+      "origin_source_hosts": [
+        "revita.bg",
+        "www.revita.bg",
+        "doublewoodsupplements.com",
+        "www.doublewoodsupplements.com"
+      ]
     },
     "natures-way": {
       "aliases": [
@@ -54,10 +66,17 @@
       "trademark": "Nature's Way",
       "manufacturer": "Nature's Way Brands, LLC",
       "eu_responsible": "Geo Nutrition LTD.",
-      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
+      "eu_responsible_source": "User confirmation for all three brands, 2026-10-28",
+      "origin_source_hosts": [
+        "revita.bg",
+        "www.revita.bg",
+        "naturesway.com",
+        "www.naturesway.com"
+      ]
     }
   },
-  "export_policy": "neutral_factual_listing",
+  "export_policy": "full_catalog_no_medical_filter",
   "origin_evidence_file": "evidence/origin_sources.json",
-  "image_review_file": "evidence/image_reviews.json"
+  "image_review_file": "evidence/image_reviews.json",
+  "medical_claim_filter": false
 }

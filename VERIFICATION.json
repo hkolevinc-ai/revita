@@ -1,0 +1,19 @@
+{
+  "version": "2.2",
+  "unit_tests": "47 passed: 39 existing tests and 8 final broad catalog tests (run separately)",
+  "offline_catalog_products": 477,
+  "exported_products": 473,
+  "exported_by_brand": {
+    "Alive": 38,
+    "Double Wood": 117,
+    "Nature’s Way": 318
+  },
+  "exclusions": {
+    "missing_original_sku": 4
+  },
+  "original_skus_verified_in_written_xlsx": true,
+  "medical_claim_filter": false,
+  "live_crawl_performed_during_this_update": false,
+  "image_inspection_in_coverage_test": "Disabled test stub, images marked unknown and omitted. Production workflow runs actual OCR.",
+  "note": "This verifies catalog coverage, not image/origin completeness or Temu approval."
+}

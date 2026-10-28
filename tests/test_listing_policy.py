@@ -10,6 +10,8 @@ class ListingPolicyTests(unittest.TestCase):
     def setUpClass(cls):
         cls.template=core.Template(ROOT/'templates/temu_template.xlsx')
         cls.config=json.loads((ROOT/'config.json').read_text())
+        cls.config['export_policy']='neutral_factual_listing'
+        cls.config['medical_claim_filter']=True
     def test_optional_retailer_claims_cleaned_original_sku_preserved(self):
         p=product(source_text='Made in USA\nTreats arthritis and supports immunity')
         row,a,_=screen_product(p,self.template,self.config,Images())

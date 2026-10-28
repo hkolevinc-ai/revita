@@ -1,3 +1,11 @@
+## 2.2 — 2026-10-28
+
+- Medical/health/certification wording no longer excludes products or images in the full catalog policy.
+- All three brands export to one ALL workbook. Missing origin/images/category facts stay blank or flagged in needs_data.csv instead of silently dropping products.
+- A separate COMPLETE_DATA workbook contains the subset without missing required data; no Temu approval guarantee.
+- Eco image/text checks remain enabled. Original SKU and exact registered entities preserved.
+- Summary includes actual exported counts by brand.
+
 # 2.1 — 28.10.2026
 
 - Фактически заглавия и описания вместо отхвърляне на целия продукт за рекламния текст на сайта.
