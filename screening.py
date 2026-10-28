@@ -128,7 +128,7 @@ class ImageReviewer:
         try:
             body,img=self.download(url)
             key=hashlib.sha256(body).hexdigest();result['sha256']=key
-            cache=self.cache/(key+'.ocr-'+self.languages+'.json')
+            cache=self.cache/(key+'.ocr-v2-'+self.languages+'.json')
             if cache.exists():data=json.loads(cache.read_text())
             else:
                 gray=ImageOps.autocontrast(ImageOps.grayscale(img))
@@ -139,17 +139,23 @@ class ImageReviewer:
                     path=Path(temp)/'label.png';gray.save(path)
                     for mode in [11,6]:
                         p=subprocess.run(['tesseract',str(path),'stdout','-l',self.languages,'--psm',str(mode),'tsv'],capture_output=True,text=True,timeout=60,check=True)
-                        words=[];confidence=[]
-                        for record in csv.DictReader(io.StringIO(p.stdout),delimiter='\t'):
+                        words=[];confidence=[];lines=[];line_key=None;line_words=[]
+                        for record in csv.DictReader(io.StringIO(p.stdout),delimiter='\t',quoting=csv.QUOTE_NONE):
                             word=(record.get('text') or '').strip()
                             try:conf=float(record.get('conf',-1))
                             except ValueError:continue
-                            if word and conf>=0:words.append(word);confidence.append(conf)
-                        pages.append({'text':' '.join(words),'words':len(words),'confidence':sum(confidence)/len(confidence) if confidence else 0})
+                            if word and conf>=0:
+                                words.append(word);confidence.append(conf)
+                                group=tuple(record.get(k) for k in ['block_num','par_num','line_num'])
+                                if line_key is not None and group!=line_key:
+                                    lines.append(' '.join(line_words));line_words=[]
+                                line_key=group;line_words.append(word)
+                        if line_words:lines.append(' '.join(line_words))
+                        pages.append({'text':'\n'.join(lines),'words':len(words),'confident_words':sum(c>=65 and bool(re.search(r'[A-Za-zА-Яа-я]{2}',w)) for c,w in zip(confidence,words)), 'confidence':sum(confidence)/len(confidence) if confidence else 0})
                 data={'passes':pages};cache.write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
             passes=data['passes'];result['text']='\n'.join(p['text'] for p in passes)
             result['medical']=hits(result['text'],MEDICAL);result['eco']=hits(result['text'],ECO);result['other']=hits(result['text'],OTHER)
-            result['quality_ok']=any(p['words']>=self.min_words and p['confidence']>=self.min_confidence for p in passes)
+            result['quality_ok']=any(p['words']>=self.min_words and (p['confidence']>=self.min_confidence or p.get('confident_words',0)>=5) for p in passes)
             result['confidence']=max(p['confidence'] for p in passes)
             result['status']='medical' if result['medical'] else 'eco' if result['eco'] else 'other' if result['other'] else 'pass' if result['quality_ok'] else 'unknown'
         except Exception as exc:result['error']=str(exc)

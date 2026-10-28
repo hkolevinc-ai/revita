@@ -56,5 +56,8 @@
       "eu_responsible": "Geo Nutrition LTD.",
       "eu_responsible_source": "User confirmation for all three brands, 2026-10-28"
     }
-  }
+  },
+  "export_policy": "neutral_factual_listing",
+  "origin_evidence_file": "evidence/origin_sources.json",
+  "image_review_file": "evidence/image_reviews.json"
 }

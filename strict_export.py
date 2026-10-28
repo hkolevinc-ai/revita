@@ -1,6 +1,6 @@
 """Three Revita brand pages -> screened Temu template, original merchant SKUs."""
 from __future__ import annotations
-import argparse, collections, copy, csv, html, json, logging, re
+import argparse, collections, copy, csv, html, json, logging, re, zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 import revita_core as core
@@ -86,6 +86,9 @@ def make_row(p,t,config,origin,profile,category):
     return row,sorted(set(problems))
 
 def screen_product(p,t,config,reviewer):
+    if config.get('export_policy')=='neutral_factual_listing':
+        from listing_policy import evaluate
+        return evaluate(p,t,config,reviewer)
     p=copy.deepcopy(p)
     audit={'id':p['id'],'sku':p.get('reference',''),'url':p['url'],'brand':p['brand'],'decision':'excluded','reasons':[],'origin':'','origin_evidence':[], 'removed_eco_paragraphs':0}
     image_rows=[]
@@ -167,16 +170,21 @@ def main(argv=None):
     ap.add_argument('--config',default='config.json');ap.add_argument('--limit',type=int,default=0)
     ap.add_argument('--output',default='output');ap.add_argument('--refresh',action='store_true')
     ap.add_argument('--from-catalog',help='Offline snapshot JSON for testing, not current prices')
+    ap.add_argument('--from-results',help='Reprocess catalog.json from an existing Revita result ZIP')
     args=ap.parse_args(argv)
     if args.limit<0:ap.error('limit must be >= 0')
+    if args.from_catalog and args.from_results:ap.error('Choose only one snapshot input')
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
     config=json.loads(Path(args.config).read_text(encoding='utf-8'));t=core.Template(config['template'])
     output=Path(args.output);output.mkdir(parents=True,exist_ok=True)
     for old in output.glob('TEMU_REVITA_FILTERED_*.xlsx'):old.unlink()
     reviewer=ImageReviewer(**config['ocr'],refresh=args.refresh);reviewer.preflight()
     errors=[];coverage=[];links={};products=[];client=None
-    if args.from_catalog:
-        products=[p for p in json.loads(Path(args.from_catalog).read_text(encoding='utf-8')) if profile_for(p.get('brand',''),config)]
+    if args.from_catalog or args.from_results:
+        if args.from_results:
+            with zipfile.ZipFile(args.from_results) as z:snapshot=json.loads(z.read('catalog.json'))
+        else:snapshot=json.loads(Path(args.from_catalog).read_text(encoding='utf-8'))
+        products=[p for p in snapshot if profile_for(p.get('brand',''),config)]
         if args.limit:products=products[:args.limit]
     else:
         client=core.Client(delay=1.5,refresh=args.refresh,diagnostics=output/'diagnostics')
@@ -215,12 +223,12 @@ def main(argv=None):
     save('coverage.json',coverage);save('discovered_urls.json',links);save('http_attempts.json',getattr(client,'attempts',[]))
     cards=['<article><p>'+html.escape(str(r['sku']))+'</p><img loading="lazy" src="'+html.escape(r['url'],quote=True)+'"><p>'+html.escape(r['url'])+'</p></article>' for r in image_audits if r['status']=='pass']
     (output/'image_review.html').write_text('<!doctype html><meta charset="utf-8"><title>Визуален преглед</title><style>body{font:16px Arial}main{display:flex;flex-wrap:wrap}article{width:340px;margin:12px;overflow-wrap:anywhere}img{width:320px;height:420px;object-fit:contain}</style><h1>Изображения след OCR проверка</h1><p>Проверете значки без текст, дребен печат и оставащи твърдения. OCR не удостоверява пълно визуално съответствие.</p><main>'+''.join(cards)+'</main>',encoding='utf-8')
-    summary={'mode':'offline snapshot' if args.from_catalog else 'live','timestamp':datetime.now(timezone.utc).isoformat(),
+    summary={'mode':'offline snapshot' if args.from_catalog or args.from_results else 'live','timestamp':datetime.now(timezone.utc).isoformat(),
              'categories':CATEGORIES,'discovered_products':len(links),'scanned_products':len(products),'exported_rows':len(rows),
              'excluded_products':sum(a['decision']!='included' for a in audits),'errors':len(errors),
              'exclusion_reasons':dict(collections.Counter(x for a in audits if a['decision']!='included' for x in a['reasons'])),
-             'complete_crawl':not args.limit and not args.from_catalog and not errors and all(x['status']=='OK' for x in coverage),
-             'original_skus_preserved':True,'visual_review_required':bool(rows),'temu_approval_guaranteed':False}
+             'complete_crawl':not args.limit and not args.from_catalog and not args.from_results and not errors and all(x['status']=='OK' for x in coverage),
+             'original_skus_preserved':True,'visual_review_required':any(a.get('visual_review_required',True) for a in audits if a['decision']=='included'),'temu_approval_guaranteed':False}
     save('summary.json',summary)
     LOG.info('Exported %s; excluded %s; errors %s',len(rows),summary['excluded_products'],len(errors))
     return 1 if errors else 0

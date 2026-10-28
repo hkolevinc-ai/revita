@@ -1,0 +1,86 @@
+{
+  "56d0d22bb4cc30b5241cffb11f2a4a4547402a43ebd40a7b196df11191d68a47": {
+    "decision": "include",
+    "sku": "23070 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "b63aeefa7528e8188d32d0e07b21965167f97ea61ff7f4967cf9824d63d875c1": {
+    "decision": "include",
+    "sku": "YBKZX DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "94c7470044e25fc1fa40019888e66125dd57a7bcba38d221e494f31389b3fddb": {
+    "decision": "include",
+    "sku": "23043 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "ea32fd6363962c8c98687dbfde800e436535b781f2839ad85af8b57eaee0339b": {
+    "decision": "include",
+    "sku": "27296 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "1984a441986356b2fc5ffe2c9dd53b8c3ca7b842e805be539f36e8ff9241915d": {
+    "decision": "include",
+    "sku": "27224 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "8a73bebcef61b9538fb9ffe58c94f54dcb79c6aeda1b2e7089a5d62d9817e96f": {
+    "decision": "include",
+    "sku": "27221 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "8cbeff5fd2ff31433d4e6fe4afd1fbf4935c28cbfaf19381ba5c1a439c67cc5a": {
+    "decision": "include",
+    "sku": "V219F DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "9d5837e6775a0babd7f3f508faccdbe2a844fcb9e0d0635b050ea1f0c8786b55": {
+    "decision": "include",
+    "sku": "27283 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Visible label contains product identity/quantity without medical or environmental benefit claims"
+  },
+  "0e62e1692cb7c6294afbe3051b3f93d37bd941845b8099649415f9920a271940": {
+    "decision": "reject",
+    "sku": "23042 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Exercise/endurance benefit text on the front label"
+  },
+  "c32314d8b72911a05826b466a9e030b50a3c26e52c030b725b7e0ae8f117c181": {
+    "decision": "reject",
+    "sku": "8QVRH DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "General biological-function statement on front label"
+  },
+  "f65811697a2879cb9e5049ebf28e4e609e01ad4cbbce32a4ce4c6f28c8fb5601": {
+    "decision": "reject",
+    "sku": "27293 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Protein-synthesis statement on front label"
+  },
+  "242034f4f3904df94532fc123c1c50a17e06d7aab9bae4c3b1b111eb2fa59f25": {
+    "decision": "reject",
+    "sku": "27266 DW",
+    "reviewed_at": "2026-10-28",
+    "method": "visual inspection of original image",
+    "note": "Side badges not sufficiently clear in the supplied product image"
+  }
+}

@@ -401,7 +401,8 @@ def category_for(product, categories, override=None):
             score = 110 if re.search(pattern, title) else 15 if re.search(pattern, ingredients) else 0
             if cid == "17704" and ("биотин" in title or "biotin" in title): score = 115
             if cid == "17702" and any(x in title for x in ["фолиева", "фолат", "folic"]): score = 115
-            if cid == "17705" and re.search(r"[bвб]\s*(?:комплекс|complex)", title): score = 115
+            if cid == "17705" and re.search(r"(?<!\w)[bвб]\s*(?:комплекс|complex)", title): score = 115
+            if cid == "17706" and re.search(r"инозитол|inositol", title): score = 115
         else:
             score = max([100 + min(len(t), 25) for t in terms if re.search(r"(?<!\w)" + re.escape(t) + r"\w*", title)] or [0])
             if not score:

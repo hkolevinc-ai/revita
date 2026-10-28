@@ -28,6 +28,7 @@ class ScreeningTests(unittest.TestCase):
     def setUpClass(cls):
         cls.template=core.Template(ROOT/'templates/temu_template.xlsx')
         cls.config=json.loads((ROOT/'config.json').read_text())
+        cls.config['export_policy']='legacy_strict'
     def screen(self,p=None,reviewer=None):
         return export.screen_product(p or product(),self.template,self.config,reviewer or Images())
     def test_original_sku_and_dynamic_new_template_legal_columns(self):
